@@ -13,7 +13,7 @@ const Gallery = require("./models/Gallery");
 
 const path = require("path")
 // Start Server and Sync Database
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 10000;
 const app = express();
 app.use(express.json());
 app.use(cors());       

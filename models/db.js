@@ -1,12 +1,21 @@
-const { Sequelize, DataTypes } = require("sequelize"); // Capital S
-const path = require("path");
+const { Sequelize, DataTypes } = require("sequelize");
+require('dotenv').config();
 
-// Create the instance (lowercase s)
-const sequelize = new Sequelize({
-  dialect: "sqlite",
-  storage: path.join(__dirname, "../database.sqlite"),
+// Use the Supabase Connection String from environment variables
+const sequelize = new Sequelize(process.env.DATABASE_URL, {
+  dialect: "postgres",
   logging: false,
+  dialectOptions: {
+    ssl: {
+      require: true,
+      rejectUnauthorized: false // Required for Render to connect to Supabase
+    }
+  }
 });
 
-// Export both the instance and the DataTypes
+// Test the connection (Optional but helpful for debugging)
+sequelize.authenticate()
+  .then(() => console.log('Successfully connected to Supabase PostgreSQL!'))
+  .catch(err => console.error('Unable to connect to the database:', err));
+
 module.exports = { sequelize, DataTypes };
