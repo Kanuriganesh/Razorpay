@@ -1,7 +1,8 @@
 const express = require("express");
 const router = express.Router();
 const multer = require('multer');
-const path = require('path');
+const path = require('path');   
+const supabase = require('../config/supabaseClient'); // Double check your path to config
 
 // Import all your models
 const Announcement = require("../models/Announcement");
@@ -111,7 +112,7 @@ router.delete('/announcements/:id', async (req, res) => {
 // --- EVENTS ROUTES ---   
 
 // Configure how files are stored
-const storage = multer.diskStorage({
+const storage = multer.memoryStorage({
   destination: (req, file, cb) => {
     cb(null, 'uploads/'); // Make sure this folder exists!
   },
@@ -134,17 +135,43 @@ router.get("/events", async (req, res) => {
 router.post("/events", upload.single('image'), async (req, res) => {
   try {
     const { title, date, time, location, description } = req.body;
-    const imagePath = req.file ? `/uploads/${req.file.filename}` : null;
+    let imageUrl = null;
+
+    // Check if an image was uploaded
+    if (req.file) {
+      // Create a unique filename to avoid overwriting files with the same name
+      const fileName = `${Date.now()}_${req.file.originalname.replace(/\s+/g, '_')}`;
+
+      // 1. Upload file buffer directly to Supabase Storage
+      const { data, error: uploadError } = await supabase.storage
+        .from('church-assets') // Your bucket name from the screenshot
+        .upload(fileName, req.file.buffer, {
+          contentType: req.file.mimetype,
+          upsert: false
+        });
+      if (uploadError) {
+        throw new Error(`Supabase upload failed: ${uploadError.message}`);
+      }
+      // 2. Get the public URL of the uploaded image
+      const { data: publicUrlData } = supabase.storage
+        .from('church-assets')
+        .getPublicUrl(fileName);
+
+      imageUrl = publicUrlData.publicUrl;
+    }
+    // 3. Save to your database using the cloud URL instead of a local path
     const newItem = await Event.create({
-      image: imagePath,
+      image: imageUrl, // This will now be a permanent https://... URL
       title,
       date,
       time,
       location,
       description
     });
+
     res.status(201).json(newItem);
   } catch (err) {
+    console.error("Error in /events route:", err);
     res.status(400).json({ message: "Create failed", error: err.message });
   }
 });
