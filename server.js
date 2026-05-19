@@ -16,13 +16,13 @@ const path = require("path")
 const PORT = process.env.PORT || 10000;
 const app = express();
 app.use(express.json());
-app.use(cors());       
 app.use("/api/admin", adminRoutes);  //just add the Routes      
 
 app.use(cors({
   origin: [
     'http://localhost:5173', // Main Website
-    'http://localhost:5174'  // Admin Panel
+    'http://localhost:5174',  // Admin Panel    
+    'https://razorpay-ia3u.onrender.com' // Self-referential fallback
   ],
   methods: ['GET', 'POST', 'PUT', 'DELETE'],
   credentials: true
