@@ -313,18 +313,37 @@ router.get("/gallery", async (req, res) => {
   }
 });
 
-// POST: Upload a new gallery photo
+// POST: Upload a new gallery photo to Supabase Storage
 router.post("/gallery", upload.single('image'), async (req, res) => {   
   try {
-    // 1. Multer checks if a file was actually sent
+    // 1. Check if a file was actually sent by the frontend
     if (!req.file) {
       return res.status(400).json({ message: "Please upload an image file" });
     }
 
-    // 2. Create the URL path to save in the database
-    const gallery_url = `/uploads/${req.file.filename}`;
+    // 2. Create a clean, unique file path for the bucket
+    const fileName = `gallery_${Date.now()}_${req.file.originalname.replace(/\s+/g, '_')}`;
 
-    // 3. Save to SQLite
+    // 3. Upload file buffer straight to your Supabase bucket
+    const { data: uploadData, error: uploadError } = await supabase.storage
+      .from('church-assets')
+      .upload(fileName, req.file.buffer, {
+        contentType: req.file.mimetype,
+        upsert: false
+      });
+
+    if (uploadError) {
+      throw new Error(`Supabase Gallery upload failed: ${uploadError.message}`);
+    }
+
+    // 4. Extract the public CDN URL string
+    const { data: publicUrlData } = supabase.storage
+      .from('church-assets')
+      .getPublicUrl(fileName);
+
+    const gallery_url = publicUrlData.publicUrl;
+
+    // 5. Save the absolute cloud URL into your local database table
     const galleryItem = await Gallery.create({ gallery_url }); 
     
     res.status(201).json(galleryItem);
@@ -334,7 +353,7 @@ router.post("/gallery", upload.single('image'), async (req, res) => {
   }
 });
 
-// PUT: Update an existing gallery photo
+// PUT: Update an existing gallery photo with a fresh upload
 router.put("/gallery/:id", upload.single('image'), async (req, res) => {
   try {
     const { id } = req.params;
@@ -344,35 +363,58 @@ router.put("/gallery/:id", upload.single('image'), async (req, res) => {
       return res.status(404).json({ message: "Image not found" });
     }
 
-    // Only update the path if a NEW file was uploaded
+    const updateData = {};
+
+    // Only hit Supabase if a brand-new file is provided in the request
     if (req.file) {
-      const newPath = `/uploads/${req.file.filename}`;
-      await galleryItem.update({ gallery_url: newPath });
+      const fileName = `gallery_${Date.now()}_${req.file.originalname.replace(/\s+/g, '_')}`;
+
+      // 1. Upload new image buffer to your bucket
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from('church-assets')
+        .upload(fileName, req.file.buffer, {
+          contentType: req.file.mimetype,
+          upsert: false
+        });
+
+      if (uploadError) {
+        throw new Error(`Supabase Gallery update failed: ${uploadError.message}`);
+      }
+
+      // 2. Grab the new working cloud URL
+      const { data: publicUrlData } = supabase.storage
+        .from('church-assets')
+        .getPublicUrl(fileName);
+
+      updateData.gallery_url = publicUrlData.publicUrl;
     }
 
+    // Update database record with the new path
+    await galleryItem.update(updateData);
     res.json(galleryItem);
   } catch (err) {
+    console.error("PUT Gallery Error:", err);
     res.status(500).json({ message: "Update failed", error: err.message });
   }
 });
 
-router.delete("/gallery/:id",async(req,res)=>{
-      try{
-          const {id} = req.params; 
-          const deleted = await Gallery.destroy({
-             where:{id:id}
-          })   
-          if(deleted){
-               res.status(200).json({ message: "Gallery deleted successfully" });
-          }  
-          else{
-               res.status(404).json({ message: "Gallery was not found" });
-          }
-      }  
-      catch(err){
-          res.status(500).json({ error: "Gallery Server Error" });
-      }
-})
+// DELETE: Remove record from database
+router.delete("/gallery/:id", async (req, res) => {
+  try {
+    const { id } = req.params; 
+    const deleted = await Gallery.destroy({
+      where: { id: id }
+    });   
+    
+    if (deleted) {
+      res.status(200).json({ message: "Gallery deleted successfully" });
+    } else {
+      res.status(404).json({ message: "Gallery was not found" });
+    }
+  } catch (err) {
+    res.status(500).json({ error: "Gallery Server Error" });
+  }
+});
 
 //Get all the payment Details of the user {who had donated all the amount to the church}   
 module.exports = router;
