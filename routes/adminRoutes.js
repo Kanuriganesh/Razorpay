@@ -136,19 +136,14 @@ router.post("/events", upload.single('image'), async (req, res) => {
   try {
     const { title, date, time, location, description } = req.body;
     let imageUrl = null;
-
     // Check if an image was uploaded
     if (req.file) {
       // Create a unique filename to avoid overwriting files with the same name
       const fileName = `${Date.now()}_${req.file.originalname.replace(/\s+/g, '_')}`;
-
       // 1. Upload file buffer directly to Supabase Storage
       const { data, error: uploadError } = await supabase.storage
         .from('church-assets') // Your bucket name from the screenshot
-        .upload(fileName, req.file.buffer, {
-          contentType: req.file.mimetype,
-          upsert: false
-        });
+        .getPublicUrl(fileName);
       if (uploadError) {
         throw new Error(`Supabase upload failed: ${uploadError.message}`);
       }
@@ -179,18 +174,38 @@ router.post("/events", upload.single('image'), async (req, res) => {
 
 
 // --- THE UPDATE ROUTE ---
+// --- THE UPDATE ROUTE WITH SUPABASE ---
 router.put("/events/:id", upload.single('image'), async (req, res) => {
   try {
     const { id } = req.params;
     const eventItem = await Event.findByPk(id);
     if (!eventItem) return res.status(404).json({ message: "Not found" });
     const updateData = { ...req.body };
+    // If a new image is provided during update
     if (req.file) {
-      updateData.image = `/uploads/${req.file.filename}`;
+      const fileName = `${Date.now()}_${req.file.originalname.replace(/\s+/g, '_')}`;
+      // 1. Upload new file buffer to Supabase
+      const { data, error: uploadError } = await supabase.storage
+        .from('church-assets')
+        .getPublicUrl(fileName);
+
+      if (uploadError) {
+        throw new Error(`Supabase update upload failed: ${uploadError.message}`);
+      }
+
+      // 2. Get the new public URL
+      const { data: publicUrlData } = supabase.storage
+        .from('church-assets')
+        .getPublicUrl(fileName);
+
+      // 3. Attach the permanent cloud URL to the update object
+      updateData.image = publicUrlData.publicUrl;
     }
+
     await eventItem.update(updateData);
     res.json(eventItem);
   } catch (err) {
+    console.error("Update Error:", err);
     res.status(500).json({ error: err.message });
   }
 });
