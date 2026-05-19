@@ -180,20 +180,26 @@ router.put("/events/:id", upload.single('image'), async (req, res) => {
     const { id } = req.params;
     const eventItem = await Event.findByPk(id);
     if (!eventItem) return res.status(404).json({ message: "Not found" });
+
     const updateData = { ...req.body };
+
     // If a new image is provided during update
     if (req.file) {
       const fileName = `${Date.now()}_${req.file.originalname.replace(/\s+/g, '_')}`;
-      // 1. Upload new file buffer to Supabase
-      const { data, error: uploadError } = await supabase.storage
+
+      // 1. ACTUALLY UPLOAD the file buffer to Supabase Storage
+      const { data: uploadData, error: uploadError } = await supabase.storage
         .from('church-assets')
-        .getPublicUrl(fileName);
+        .upload(fileName, req.file.buffer, {
+          contentType: req.file.mimetype,
+          upsert: false
+        });
 
       if (uploadError) {
         throw new Error(`Supabase update upload failed: ${uploadError.message}`);
       }
 
-      // 2. Get the new public URL
+      // 2. Get the new public URL string
       const { data: publicUrlData } = supabase.storage
         .from('church-assets')
         .getPublicUrl(fileName);
@@ -202,6 +208,7 @@ router.put("/events/:id", upload.single('image'), async (req, res) => {
       updateData.image = publicUrlData.publicUrl;
     }
 
+    // Update the database record with the text fields and the new image URL (if uploaded)
     await eventItem.update(updateData);
     res.json(eventItem);
   } catch (err) {
