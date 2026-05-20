@@ -16,7 +16,7 @@ const path = require("path")
 const PORT = process.env.PORT || 10000;
 const app = express();
 app.use(express.json());
-app.use("/api/admin", adminRoutes);  //just add the Routes      
+   
 
 app.use(cors({
   origin: [
@@ -24,8 +24,9 @@ app.use(cors({
     'http://localhost:5174',  // Admin Panel    
     'https://razorpay-ia3u.onrender.com' // Self-referential fallback
   ],
-  methods: ['GET', 'POST', 'PUT', 'DELETE'],
-  credentials: true
+  methods: ['GET', 'POST', 'PUT', 'DELETE','OPTIONS'],
+  credentials: true,  
+  allowedHeaders: ['Content-Type', 'Authorization']
 }));
 const razorpay = new Razorpay({
   key_id: process.env.RAZORPAY_KEY_ID,
@@ -44,6 +45,6 @@ sequelize.sync()
   });
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
-
+app.use("/api/admin", adminRoutes);  //just add the Routes   
 
 // A simple route to see all donations in your browser
