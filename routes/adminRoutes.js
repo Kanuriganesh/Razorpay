@@ -1,7 +1,9 @@
 const express = require("express");
 const router = express.Router();
 const multer = require('multer');
-const path = require('path');   
+const path = require('path');      
+const crypto = require("crypto");
+const Razorpay = require("razorpay");
 const supabase = require('../config/supabaseClient'); // Double check your path to config
 
 // Import all your models
@@ -413,6 +415,71 @@ router.delete("/gallery/:id", async (req, res) => {
     }
   } catch (err) {
     res.status(500).json({ error: "Gallery Server Error" });
+  }
+});
+
+
+// Route to create an order
+router.post("/payment/order", async (req, res) => {    
+  console.log("hiiii")
+  try {
+    const rawAmount = parseInt(req.body.amount, 10);
+    if (!rawAmount || isNaN(rawAmount)) {
+      return res.status(400).json({ message: "Invalid or missing amount parameter" });
+    }
+    const options = {
+      amount: rawAmount * 100, // Amount in paise
+      currency: "INR",
+      receipt: "receipt_" + Math.random().toString(36).substring(7),
+    };
+    const order = await razorpay.orders.create(options);
+    return res.status(200).json(order);
+  } catch (error) {
+    console.error("CRITICAL RAZORPAY API CRASH:", error);
+    // THIS IS THE TRICK: Send the real error message back to the frontend!
+    return res.status(500).json({ 
+      message: "Razorpay core SDK crash", 
+      errorDescription: error.description || error.message || "Unknown error",
+      fullError: error
+    });
+  }
+});
+
+// Route to verify payment
+router.post("/payment/verify", async (req, res) => {
+  const { 
+    razorpay_order_id, 
+    razorpay_payment_id, 
+    razorpay_signature, 
+    name, email, phone, amount 
+  } = req.body;
+
+  const body = razorpay_order_id + "|" + razorpay_payment_id;
+  const expectedSignature = crypto
+    .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET)
+    .update(body.toString())
+    .digest("hex");
+
+  if (expectedSignature === razorpay_signature) {
+    try {
+      // Sequelize uses .create() instead of new Donation().save()
+      await Donation.create({
+        name,
+        email,
+        phone,
+        amount,
+        razorpay_order_id,
+        razorpay_payment_id,     
+        razorpay_signature,
+        status: "success"
+      });
+      res.status(200).json({ message: "Verified and Saved to SQLite!", success: true });
+    } catch (error) {
+      console.error("Database Save Error:", error);
+      res.status(500).json({ message: "Payment verified but save failed", success: false });
+    }
+  } else {
+    res.status(400).json({ message: "Invalid signature", success: false });
   }
 });
 

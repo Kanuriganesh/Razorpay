@@ -44,59 +44,6 @@ sequelize.sync()
   });
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
-// Route to create an order
-app.post("/api/payment/order", async (req, res) => {
-  try {
-    const options = {
-      amount: req.body.amount * 100, // Amount in paise
-      currency: "INR",
-      receipt: "receipt_" + Math.random().toString(36).substring(7),
-    };
-    const order = await razorpay.orders.create(options);
-    res.status(200).json(order);
-  } catch (error) {
-    res.status(500).send(error);
-  }
-});
 
-// Route to verify payment
-app.post("/api/payment/verify", async (req, res) => {
-  const { 
-    razorpay_order_id, 
-    razorpay_payment_id, 
-    razorpay_signature, 
-    name, email, phone, amount 
-  } = req.body;
-
-  const body = razorpay_order_id + "|" + razorpay_payment_id;
-  const expectedSignature = crypto
-    .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET)
-    .update(body.toString())
-    .digest("hex");
-
-  if (expectedSignature === razorpay_signature) {
-    try {
-      // Sequelize uses .create() instead of new Donation().save()
-      await Donation.create({
-        name,
-        email,
-        phone,
-        amount,
-        razorpay_order_id,
-        razorpay_payment_id,     
-        razorpay_signature,
-        status: "success"
-      });
-
-      res.status(200).json({ message: "Verified and Saved to SQLite!", success: true });
-    } catch (error) {
-      console.error("Database Save Error:", error);
-      res.status(500).json({ message: "Payment verified but save failed", success: false });
-    }
-  } else {
-    res.status(400).json({ message: "Invalid signature", success: false });
-  }
-});
-  
 
 // A simple route to see all donations in your browser
