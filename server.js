@@ -22,7 +22,8 @@ app.use(cors({
   origin: [
     'http://localhost:5173', // Main Website
     'http://localhost:5174',  // Admin Panel    
-    'https://razorpay-ia3u.onrender.com' // Self-referential fallback
+    'https://razorpay-ia3u.onrender.com', // Self-referential fallback    
+    'https://church-admin-drab.vercel.app/'
   ],
   methods: ['GET', 'POST', 'PUT', 'DELETE','OPTIONS'],
   credentials: true,  
