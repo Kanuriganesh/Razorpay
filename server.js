@@ -18,17 +18,25 @@ const app = express();
 app.set("trust proxy", 1);
 app.use(express.json());
    
-
 app.use(cors({
-  origin: [
-    'http://localhost:5173', // Main Website
-    'http://localhost:5174',  // Admin Panel    
-    'https://razorpay-ia3u.onrender.com', // Self-referential fallback    
-    'https://church-admin-drab.vercel.app/'
-  ],
-  methods: ['GET', 'POST', 'PUT', 'DELETE','OPTIONS'],
-  credentials: true,  
-  allowedHeaders: ['Content-Type', 'Authorization']
+  origin: function (origin, callback) {
+    const allowedOrigins = [
+      'http://localhost:5173',
+      'http://localhost:5174',
+      'https://razorpay-ia3u.onrender.com',
+      'https://church-admin-drab.vercel.app'
+    ];
+    // FAIL-SAFE: If origin matches our Vercel domain or contains it, let it pass
+    if (!origin || allowedOrigins.includes(origin) || origin.includes('church-admin-drab.vercel.app')) {
+      callback(null, true);
+    } else {
+      console.error(`❌ CORS Blocked Origin: ${origin}`);
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  credentials: true,
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept']
 }));
 
 
