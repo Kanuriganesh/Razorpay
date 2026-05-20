@@ -453,39 +453,57 @@ router.post("/payment/order", async (req, res) => {
 
 // Route to verify payment
 router.post("/payment/verify", async (req, res) => {
-  const { 
-    razorpay_order_id, 
-    razorpay_payment_id, 
-    razorpay_signature, 
-    name, email, phone, amount 
-  } = req.body;
+  console.log("=== INCOMING VERIFICATION PAYLOAD ===", req.body);
+  try {
+    const { 
+      razorpay_order_id, 
+      razorpay_payment_id, 
+      razorpay_signature, 
+      name, email, phone, amount 
+    } = req.body;
 
-  const body = razorpay_order_id + "|" + razorpay_payment_id;
-  const expectedSignature = crypto
-    .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET)
-    .update(body.toString())
-    .digest("hex");
+    // 1. Double check that critical signature segments exist
+    if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
+      console.log("Missing core tracking parameters!");
+      return res.status(400).json({ message: "Missing tracking signature parameters", success: false });
+    }
 
-  if (expectedSignature === razorpay_signature) {
-    try {
-      // Sequelize uses .create() instead of new Donation().save()
+    // 2. Generate the local cryptographic signature matching Razorpay rules
+    const body = razorpay_order_id + "|" + razorpay_payment_id;
+    const expectedSignature = crypto
+      .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET.trim()) // added .trim() to wipe out hidden spaces!
+      .update(body.toString())
+      .digest("hex");
+    console.log("Expected Hash:", expectedSignature);
+    console.log("Received Hash:", razorpay_signature);
+
+    if (expectedSignature === razorpay_signature) {
+      console.log("✅ HASHES MATCH! Writing entry row to records storage...");
+      
+      // 3. Save the entry row into your Database Table
       await Donation.create({
         name,
         email,
         phone,
-        amount,
+        amount: Number(amount), // force convert string numbers to clear integers
         razorpay_order_id,
         razorpay_payment_id,     
         razorpay_signature,
         status: "success"
       });
-      res.status(200).json({ message: "Verified and Saved to SQLite!", success: true });
-    } catch (error) {
-      console.error("Database Save Error:", error);
-      res.status(500).json({ message: "Payment verified but save failed", success: false });
+
+      return res.status(200).json({ message: "Verified and Saved to Database!", success: true });
+    } else {
+      console.log("❌ CRITICAL HASH MATCH MISMATCH!");
+      return res.status(400).json({ 
+        message: "Invalid signature verification validation match", 
+        success: false,
+        debug: { expected: expectedSignature, received: razorpay_signature }
+      });
     }
-  } else {
-    res.status(400).json({ message: "Invalid signature", success: false });
+  } catch (error) {
+    console.error("Verification Pipeline Error Exception:", error);
+    return res.status(500).json({ message: "Internal server verification pipeline crash", error: error.message });
   }
 });
 
