@@ -4,7 +4,13 @@ const multer = require('multer');
 const path = require('path');      
 const crypto = require("crypto");
 const Razorpay = require("razorpay");
-const supabase = require('../config/supabaseClient'); // Double check your path to config
+const supabase = require('../config/supabaseClient'); // Double check your path to config   
+
+
+const razorpay = new Razorpay({
+  key_id: process.env.RAZORPAY_KEY_ID,
+  key_secret: process.env.RAZORPAY_KEY_SECRET,
+});    
 
 // Import all your models
 const Announcement = require("../models/Announcement");

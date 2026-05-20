@@ -28,10 +28,7 @@ app.use(cors({
   credentials: true,  
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
-const razorpay = new Razorpay({
-  key_id: process.env.RAZORPAY_KEY_ID,
-  key_secret: process.env.RAZORPAY_KEY_SECRET,
-});    
+
 
 sequelize.sync()
   .then(() => {
