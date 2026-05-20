@@ -24,7 +24,8 @@ app.use(cors({
       'http://localhost:5173',
       'http://localhost:5174',
       'https://razorpay-ia3u.onrender.com',
-      'https://church-admin-drab.vercel.app'
+      'https://church-admin-drab.vercel.app', 
+      'https://church-app-flax.vercel.app/'
     ];
     // FAIL-SAFE: If origin matches our Vercel domain or contains it, let it pass
     if (!origin || allowedOrigins.includes(origin) || origin.includes('church-admin-drab.vercel.app')) {
