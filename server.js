@@ -1,4 +1,4 @@
-const express = require("express");
+const express = require("express"); 
 const cors = require("cors");
 require('dotenv').config();
 const Razorpay = require("razorpay");
@@ -27,7 +27,6 @@ app.use(cors({
       'https://church-admin-drab.vercel.app',
       'https://church-app-flax.vercel.app' // FIXED: Removed trailing slash string completely
     ];
-
     // Check if origin matches or belongs to our vercel ecosystems
     const isAllowed = !origin || 
                       allowedOrigins.includes(origin) || 
@@ -42,7 +41,7 @@ app.use(cors({
       callback(null, false); // Safe rejection: returns a clean CORS block instead of throwing a 500 server crash!
     }
   },
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS','PATCH'],
   credentials: true,
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept']
 }));

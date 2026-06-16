@@ -1,14 +1,19 @@
 const { createClient } = require('@supabase/supabase-js');
 require('dotenv').config();
 
-// These variables will be pulled from your .env locally 
-// and from "Environment Variables" on Render
 const supabaseUrl = process.env.SUPABASE_URL;
-const supabaseKey = process.env.SUPABASE_ANON_KEY;
-
+// THE FIX: Switch from ANON_KEY to the master SERVICE_ROLE_KEY
+const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY; 
 if (!supabaseUrl || !supabaseKey) {
-  console.error("Supabase URL or Anon Key is missing! Check your environment variables.");
+  console.error("Supabase URL or Service Role Key is missing! Check your .env configuration.");
 }
 
-const supabase = createClient(supabaseUrl, supabaseKey);
+// This client will now securely bypass all RLS walls on your Node server!
+const supabase = createClient(supabaseUrl, supabaseKey, {
+  auth: {
+    persistSession: false,
+    autoRefreshToken: false
+  }
+});
+
 module.exports = supabase;

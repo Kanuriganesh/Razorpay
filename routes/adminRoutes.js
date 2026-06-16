@@ -1,22 +1,35 @@
 const express = require("express");
 const router = express.Router();
 const multer = require('multer');
-const path = require('path');      
+const path = require('path');
 const crypto = require("crypto");
 const Razorpay = require("razorpay");
-const supabase = require('../config/supabaseClient'); // Double check your path to config   
+const supabase = require('../config/supabaseClient'); // Double check your path to config       
+const axios = require('axios');   
+const twilio = require('twilio');
 
+// 🔐 Initialize the Twilio SDK Client using explicit environment variables
+const accountSid = process.env.TWILIO_ACCOUNT_SID;
+const authToken = process.env.TWILIO_AUTH_TOKEN;
+const twilioCallerId = process.env.TWILIO_PHONE_NUMBER;
+
+// Hard input-validation flag check to prevent application bootstrap crashes
+if (!accountSid || !authToken || !twilioCallerId) {
+  console.error("❌ CRITICAL CONFIGURATION FAULT: Twilio environment variables are missing.");
+}
+
+const client = twilio(accountSid, authToken);
 
 const razorpay = new Razorpay({
   key_id: process.env.RAZORPAY_KEY_ID,
   key_secret: process.env.RAZORPAY_KEY_SECRET,
-});    
+});
 
 // Import all your models
 const Announcement = require("../models/Announcement");
 const Event = require("../models/Event");
 const Sermon = require("../models/Sermon");
-const Gallery = require("../models/Gallery");   
+const Gallery = require("../models/Gallery");
 const Donation = require("../models/Donation")
 
 //TO Get all the data for the donation table 
@@ -41,9 +54,9 @@ router.get("/announcements", async (req, res) => {
   } catch (error) {
     // If the database fails, we catch the error here
     console.error("GET Announcements Error:", error);
-    res.status(500).json({ 
-      message: "Failed to retrieve announcements", 
-      error: error.message 
+    res.status(500).json({
+      message: "Failed to retrieve announcements",
+      error: error.message
     });
   }
 });
@@ -59,50 +72,50 @@ router.post("/announcements", async (req, res) => {
     res.status(201).json(newItem);
   } catch (error) {
     console.error("POST Announcement Error:", error);
-    
+
     // Check if it's a Sequelize validation error (e.g., unique constraint)
     if (error.name === 'SequelizeValidationError') {
       return res.status(400).json({ message: error.errors[0].message });
     }
 
-    res.status(500).json({ 
-      message: "Server error while creating announcement", 
-      error: error.message 
+    res.status(500).json({
+      message: "Server error while creating announcement",
+      error: error.message
     });
   }
 });
 
 //3 UPDATE:update the announcement 
 router.put("/announcement/:id", async (req, res) => {
-    try {
-        const { id } = req.params;
-        const { title, date, time, location, description } = req.body;
-        // Find the announcement first
-        const announcement = await Announcement.findByPk(id);   
-        if (!announcement) {
-            return res.status(404).json({ message: "Announcement not found" });
-        }
-        // Update the fields
-        await announcement.update({
-            title,
-            date,
-            time,
-            location,
-            description
-        });
-        res.json(announcement);
-    } catch (err) {
-        console.error("Sequelize Error:", err); // CHECK YOUR TERMINAL FOR THIS
-        res.status(500).json({ message: "Update failed", error: err.message });
+  try {
+    const { id } = req.params;
+    const { title, date, time, location, description } = req.body;
+    // Find the announcement first
+    const announcement = await Announcement.findByPk(id);
+    if (!announcement) {
+      return res.status(404).json({ message: "Announcement not found" });
     }
+    // Update the fields
+    await announcement.update({
+      title,
+      date,
+      time,
+      location,
+      description
+    });
+    res.json(announcement);
+  } catch (err) {
+    console.error("Sequelize Error:", err); // CHECK YOUR TERMINAL FOR THIS
+    res.status(500).json({ message: "Update failed", error: err.message });
+  }
 });
 // DELETE an announcement
 router.delete('/announcements/:id', async (req, res) => {
   try {
     const { id } = req.params;
     // Perform the deletion in SQLite via Sequelize
-    const deleted = await Announcement.destroy({ 
-      where: { id: id } 
+    const deleted = await Announcement.destroy({
+      where: { id: id }
     });
     if (deleted) {
       // 204 No Content is also a good professional status for a successful delete
@@ -128,10 +141,10 @@ const storage = multer.memoryStorage({
     cb(null, Date.now() + path.extname(file.originalname)); // unique filename
   }
 });
-const upload = multer({ storage: storage });  
+const upload = multer({ storage: storage });
 
 router.get("/events", async (req, res) => {
-     try {
+  try {
     const data = await Event.findAll({ order: [['date', 'DESC']] });
     res.json(data);
   } catch (err) {
@@ -225,59 +238,59 @@ router.put("/events/:id", upload.single('image'), async (req, res) => {
   }
 });
 
-router.delete("/events/:id",async(req,res)=>{
-     try{
-         const {id} = req.params; 
-         const deleted = await Event.destroy({
-           where:{id:id}
-         })      
-          if (deleted) {
+router.delete("/events/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const deleted = await Event.destroy({
+      where: { id: id }
+    })
+    if (deleted) {
       // 204 No Content is also a good professional status for a successful delete
       res.status(200).json({ message: "Event deleted successfully" });
     } else {
       res.status(404).json({ message: "Event not found" });
     }
-     }   
-     catch(err){
-        console.error("Delete Error:", err);
-       res.status(500).json({ error: "Internal Server Error" });
-     }
+  }
+  catch (err) {
+    console.error("Delete Error:", err);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
 })
 
 
 // --- SERMON ROUTES ---    
-router.put("/sermon/:id",async(req,res)=>{
-     try{
-         const {id} = req.params;    
-         const {title,youtube_url,description} = req.body;
-         const sermonItem = await Sermon.findByPk(id); 
-         if(!sermonItem){
-           return res.status(404).json({ message: "Not found" });
-         }        
-        await sermonItem.update({
-            title,youtube_url,description
-         })   
-         res.json(sermonItem) 
-     }  
-     catch(err){
-         res.status(500).json({ message: "Update failed", error: err.message });
-     }
+router.put("/sermon/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { title, youtube_url, description } = req.body;
+    const sermonItem = await Sermon.findByPk(id);
+    if (!sermonItem) {
+      return res.status(404).json({ message: "Not found" });
+    }
+    await sermonItem.update({
+      title, youtube_url, description
+    })
+    res.json(sermonItem)
+  }
+  catch (err) {
+    res.status(500).json({ message: "Update failed", error: err.message });
+  }
 })
 
-router.get("/sermon", async (req, res) => {   
-  try{
-     
-  
-  const data = await Sermon.findAll({ order: [['createdAt', 'DESC']] });
-  res.json(data);   
-  }  
-  catch(err){
-      res.status(500).json({ message: "Failed to fetch sermon" });
+router.get("/sermon", async (req, res) => {
+  try {
+
+
+    const data = await Sermon.findAll({ order: [['createdAt', 'DESC']] });
+    res.json(data);
+  }
+  catch (err) {
+    res.status(500).json({ message: "Failed to fetch sermon" });
   }
 });
 
-router.post("/sermon", async (req, res) => {   
-      try {
+router.post("/sermon", async (req, res) => {
+  try {
     // Basic validation: Check if title and content exist in req.body
     if (!req.body.title || !req.body.description || !req.body.youtube_url) {
       return res.status(400).json({ message: "Title , Content,youtube_url are required fields." });
@@ -286,43 +299,43 @@ router.post("/sermon", async (req, res) => {
     res.status(201).json(newItem);
   } catch (error) {
     console.error("POST Sermon Error:", error);
-    res.status(500).json({ 
-      message: "Server error while creating Sermon", 
-      error: error.message 
+    res.status(500).json({
+      message: "Server error while creating Sermon",
+      error: error.message
     });
   }
-});     
- 
-router.delete("/sermon/:id",async(req,res)=>{
-      try{
-          const {id} = req.params; 
-          const deleted = await Sermon.destroy({
-             where:{id:id}
-          })   
-          if(deleted){
-               res.status(200).json({ message: "Sermon deleted successfully" });
-          }  
-          else{
-               res.status(404).json({ message: "Sermon was not found" });
-          }
-      }  
-      catch(err){
-          res.status(500).json({ error: "Sermon Server Error" });
-      }
+});
+
+router.delete("/sermon/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const deleted = await Sermon.destroy({
+      where: { id: id }
+    })
+    if (deleted) {
+      res.status(200).json({ message: "Sermon deleted successfully" });
+    }
+    else {
+      res.status(404).json({ message: "Sermon was not found" });
+    }
+  }
+  catch (err) {
+    res.status(500).json({ error: "Sermon Server Error" });
+  }
 })
 // --- GALLERY ROUTES ---
 router.get("/gallery", async (req, res) => {
-  try{
-  const data = await Gallery.findAll({ order: [['createdAt', 'DESC']] });
-  res.json(data);    
+  try {
+    const data = await Gallery.findAll({ order: [['createdAt', 'DESC']] });
+    res.json(data);
   }
-  catch(err){
-         res.status(500).json({ message: "Failed to fetch Gallery" });
+  catch (err) {
+    res.status(500).json({ message: "Failed to fetch Gallery" });
   }
 });
 
 // POST: Upload a new gallery photo to Supabase Storage
-router.post("/gallery", upload.single('image'), async (req, res) => {   
+router.post("/gallery", upload.single('image'), async (req, res) => {
   try {
     // 1. Check if a file was actually sent by the frontend
     if (!req.file) {
@@ -352,8 +365,8 @@ router.post("/gallery", upload.single('image'), async (req, res) => {
     const gallery_url = publicUrlData.publicUrl;
 
     // 5. Save the absolute cloud URL into your local database table
-    const galleryItem = await Gallery.create({ gallery_url }); 
-    
+    const galleryItem = await Gallery.create({ gallery_url });
+
     res.status(201).json(galleryItem);
   } catch (error) {
     console.error("POST Gallery Error:", error);
@@ -409,11 +422,11 @@ router.put("/gallery/:id", upload.single('image'), async (req, res) => {
 // DELETE: Remove record from database
 router.delete("/gallery/:id", async (req, res) => {
   try {
-    const { id } = req.params; 
+    const { id } = req.params;
     const deleted = await Gallery.destroy({
       where: { id: id }
-    });   
-    
+    });
+
     if (deleted) {
       res.status(200).json({ message: "Gallery deleted successfully" });
     } else {
@@ -426,7 +439,7 @@ router.delete("/gallery/:id", async (req, res) => {
 
 
 // Route to create an order
-router.post("/payment/order", async (req, res) => {    
+router.post("/payment/order", async (req, res) => {
   console.log("hiiii")
   try {
     const rawAmount = parseInt(req.body.amount, 10);
@@ -443,8 +456,8 @@ router.post("/payment/order", async (req, res) => {
   } catch (error) {
     console.error("CRITICAL RAZORPAY API CRASH:", error);
     // THIS IS THE TRICK: Send the real error message back to the frontend!
-    return res.status(500).json({ 
-      message: "Razorpay core SDK crash", 
+    return res.status(500).json({
+      message: "Razorpay core SDK crash",
       errorDescription: error.description || error.message || "Unknown error",
       fullError: error
     });
@@ -455,11 +468,11 @@ router.post("/payment/order", async (req, res) => {
 router.post("/payment/verify", async (req, res) => {
   console.log("=== INCOMING VERIFICATION PAYLOAD ===", req.body);
   try {
-    const { 
-      razorpay_order_id, 
-      razorpay_payment_id, 
-      razorpay_signature, 
-      name, email, phone, amount 
+    const {
+      razorpay_order_id,
+      razorpay_payment_id,
+      razorpay_signature,
+      name, email, phone, amount
     } = req.body;
 
     // 1. Double check that critical signature segments exist
@@ -479,7 +492,7 @@ router.post("/payment/verify", async (req, res) => {
 
     if (expectedSignature === razorpay_signature) {
       console.log("✅ HASHES MATCH! Writing entry row to records storage...");
-      
+
       // 3. Save the entry row into your Database Table
       await Donation.create({
         name,
@@ -487,7 +500,7 @@ router.post("/payment/verify", async (req, res) => {
         phone,
         amount: Number(amount), // force convert string numbers to clear integers
         razorpay_order_id,
-        razorpay_payment_id,     
+        razorpay_payment_id,
         razorpay_signature,
         status: "success"
       });
@@ -495,8 +508,8 @@ router.post("/payment/verify", async (req, res) => {
       return res.status(200).json({ message: "Verified and Saved to Database!", success: true });
     } else {
       console.log("❌ CRITICAL HASH MATCH MISMATCH!");
-      return res.status(400).json({ 
-        message: "Invalid signature verification validation match", 
+      return res.status(400).json({
+        message: "Invalid signature verification validation match",
         success: false,
         debug: { expected: expectedSignature, received: razorpay_signature }
       });
@@ -507,5 +520,340 @@ router.post("/payment/verify", async (req, res) => {
   }
 });
 
-//Get all the payment Details of the user {who had donated all the amount to the church}   
+//Get all the payment Details of the user {who had donated all the amount to the church}  
+
+
+//inserting all details of the users in the supabase database from the admin panel 
+
+
+// Route to handle adding a new church member
+// Endpoint matching the frontend fetch request link
+router.post('/add-member', async (req, res) => {
+  const { name, phone, churchBranch, isFavorite } = req.body;
+
+  // 1. Input confirmation safety check
+  if (!name || !phone || !churchBranch) {
+    return res.status(400).json({
+      success: false,
+      message: 'Missing required member parameters.'
+    });
+  }
+
+  try {
+    // 2. 🛡️ DUPLICATE PHONE NUMBER CHECK
+    // Query Supabase to find if any existing row shares this exact phone number
+    const { data: existingMember, error: checkError } = await supabase
+      .from('church_members')
+      .select('phone_number')
+      .eq('phone_number', phone)
+      .maybeSingle(); // Returns null safely instead of throwing an error if no row is found
+
+    if (checkError) {
+      console.error('Supabase Look-up Error:', checkError.message);
+      throw checkError;
+    }
+
+    // 3. If a record comes back, stop execution and return a clean error message
+    if (existingMember) {
+      return res.status(400).json({
+        success: false,
+        message: `Phone number ${phone} is already registered to another church member.`
+      });
+    }
+
+    // 4. Proceed with injection if the phone number is clear and unique
+    const { data, error } = await supabase
+      .from('church_members')
+      .insert([
+        {
+          name: name,
+          phone_number: phone,
+          church_branch: churchBranch,
+          is_favorite: isFavorite || false // Fallback to false if undefined
+        }
+      ])
+      .select();
+
+    if (error) throw error;
+
+    // Send positive callback acknowledgement back to AddUser UI layout
+    return res.status(200).json({
+      success: true,
+      message: 'Member recorded smoothly!',
+      data: data
+    });
+
+  } catch (error) {
+    console.error('Supabase DB Exception:', error.message);
+    return res.status(500).json({
+      success: false,
+      message: 'Internal server failed to execute table entry.',
+      errorDetails: error.message
+    });
+  }
+});
+
+// 1. Fetch only standard branch members (WHERE is_favorite = false)
+router.get('/members/:branch', async (req, res) => {
+  const { branch } = req.params;
+  try {
+    const { data, error } = await supabase
+      .from('church_members')
+      .select('*')
+      .eq('church_branch', branch)
+      .eq('is_favorite', false); // ◄ CRITICAL: Only brings back non-favorites!
+
+    if (error) throw error;
+    return res.status(200).json({ success: true, data });
+  } catch (error) {
+    console.error('Fetch Error:', error.message);
+    return res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// 2. Fetch ALL favorited members across all branches (WHERE is_favorite = true)
+router.get('/favorites', async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from('church_members')
+      .select('*')
+      .eq('is_favorite', true); // ◄ CRITICAL: Grabs pinned favorites only!
+    if (error) throw error;
+    return res.status(200).json({ success: true, data });
+  } catch (error) {
+    console.error('Favorites Fetch Error:', error.message);
+    return res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// Route to toggle a member's favorite status
+router.patch('/members/toggle-favorite/:id', async (req, res) => {
+  const { id } = req.params;
+  const { currentStatus } = req.body; // Pass the current true/false value to flip it
+  try {
+    const { data, error } = await supabase
+      .from('church_members')
+      .update({ is_favorite: !currentStatus }) // Negates the state perfectly
+      .eq('id', id)
+      .select();
+    if (error) throw error;
+    return res.status(200).json({
+      success: true,
+      message: 'Favorite setting altered successfully!',
+      data
+    });
+  } catch (error) {
+    console.error('Toggle Route Error:', error.message);
+    return res.status(500).json({ success: false, message: 'Database failed to alter status.' });
+  }
+});
+
+// 1. Get the saved audio link configuration for a specific tab view segment
+router.get('/settings/audio/:tabName', async (req, res) => {
+  const { tabName } = req.params;
+  try {
+    const { data, error } = await supabase
+      .from('campaign_settings')
+      .select('audio_url')
+      .eq('target_tab', tabName)
+      .single(); // Grabs exactly one record match
+
+    if (error && error.code !== 'PGRST116') throw error; // Ignore empty/no-match errors safely
+
+    return res.status(200).json({
+      success: true,
+      audioUrl: data ? data.audio_url : ''
+    });
+  } catch (error) {
+    console.error('Settings Get Failure:', error.message);
+    return res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// 2. Save or update a custom audio link configuration for a specific tab view segment
+router.put('/settings/audio', async (req, res) => {
+  const { tabName, audioUrl } = req.body;
+  try {
+    const { data, error } = await supabase
+      .from('campaign_settings')
+      .upsert({ target_tab: tabName, audio_url: audioUrl }, { onConflict: 'target_tab' })
+      .select();
+
+    if (error) throw error;
+    return res.status(200).json({ success: true, message: 'Audio routing preference stored permanently!' });
+  } catch (error) {
+    console.error('Settings Put Failure:', error.message);
+    return res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+
+
+
+router.post('/broadcast-voice', async (req, res) => {
+  const { phoneNumbers,  audioUrl } = req.body;   
+  console.log(phoneNumbers, audioUrl)
+  console.log("Twilio Inbound Payload Interception:", { phoneNumbers,  audioUrl });
+
+  if (!phoneNumbers || !Array.isArray(phoneNumbers) || phoneNumbers.length === 0) {
+    return res.status(400).json({ success: false, message: 'Invalid payload structure: phoneNumbers must be a non-empty array.' });
+  }
+
+  // Ensure there is at least something to communicate to the recipient
+  if (!audioUrl) {
+    return res.status(400).json({ success: false, message: 'Missing media source: Provide either an audioUrl file stream or text parameter.' });
+  }
+
+  try {
+   // In your Backend Express Voice route file, update the map block:
+    const sanitizedNumbers = phoneNumbers
+      .map(num => {
+        if (typeof num !== 'string') return null;
+        let clean = num.trim().replace(/\D/g, '');
+
+        if (clean.length === 10) {
+          return `+91${clean}`;
+        } 
+        // Captures both 91 (India) and 44 (UK) 12-digit payloads cleanly!
+        if (clean.length === 12 && (clean.startsWith('91') || clean.startsWith('44'))) {
+          return `+${clean}`; // Becomes +44XXXXXXXXXX
+        }
+        
+        return null;
+      })
+      .filter(num => num !== null);
+
+    // 🚨 Add this log right here to see what is actually being passed to Twilio!
+    console.log("🛡️ Formatted targets sent to Twilio pipeline:", sanitizedNumbers);
+
+    // Exit immediately if verification filters clean out all array targets
+    if (sanitizedNumbers.length === 0) {
+      return res.status(400).json({ success: false, message: 'Security check failed: No valid Indian mobile numbers detected.' });
+    }
+
+    // 3. Construct Immutable TwiML Instruction Payloads
+    // This dynamically determines if Twilio plays a raw MP3/WAV or triggers a Text-to-Speech Engine
+    let twimlPayload = '';
+    if (audioUrl) {
+      // Validate string to protect against raw command injection attacks
+      const secureUrl = encodeURI(audioUrl.trim());
+      twimlPayload = `<Response><Play>${secureUrl}</Play></Response>`;
+    } 
+
+    console.log(`🛡️ Verified Queue Targets: ${sanitizedNumbers.join(', ')}`);
+
+    // 4. Fire Async Telephony Dispatches in Parallel
+    const deliveryQueue = sanitizedNumbers.map(targetNumber => {
+      // If testing locally, use your ngrok or localtunnel HTTPS URL (e.g., 'https://your-ngrok-subdomain.ngrok-free.app')
+      // If deployed, use your live backend link (e.g., 'https://your-backend.onrender.com')
+      const serverBaseUrl = process.env.SERVER_URL || 'http://localhost:10000'; 
+
+      return client.calls.create({
+        twiml: `<Response><Play>${audioUrl}</Play></Response>`,
+        to: targetNumber,
+        from: twilioCallerId,
+        asyncAmd: 'Enable',
+        
+        // 🔥 THE NEW TELEMETRY HOOK LAYER:
+        statusCallback: `http://localhost:10000/api/admin/twilio-voice-callback`,
+        statusCallbackEvent: ['completed', 'failed', 'busy', 'no-answer'],
+        statusCallbackMethod: 'POST'
+      });
+    });
+
+    const executionResults = await Promise.allSettled(deliveryQueue);
+
+    // 5. Parse operational responses for backend transparency logs & 🔥 UPDATE SUPABASE
+    const summary = executionResults.reduce((acc, result, idx) => {
+      const currentNumber = sanitizedNumbers[idx];
+      // Strip out the '+' to match your database column format
+      const dbLookupNumber = currentNumber.replace('+', '');
+      if (result.status === 'fulfilled') {   
+        //console.log("this is result from the successfull call",result)
+        acc.successes.push({ number: currentNumber, sid: result.value.sid });
+
+        // 🔥 FIRE-AND-FORGET UPDATE: Log the successful initial Twilio handover (e.g. "queued" or "initiated")
+        supabase
+          .from('church_members')
+          .update({ 
+            last_call_status: result.value.status || 'queued', 
+            last_call_duration: 0 
+          })
+          .eq('phone_number', dbLookupNumber)
+          .then(({ error }) => {
+            if (error) console.error(`⚠️ Database Sync Error for ${currentNumber}:`, error.message);
+          });
+
+      } else {
+        acc.failures.push({ number: currentNumber, error: result.reason.message });
+
+        // 🔥 FIRE-AND-FORGET UPDATE: If Twilio dropped it instantly (e.g. unverified), log the failure state
+        supabase
+          .from('church_members')
+          .update({ 
+            last_call_status: 'failed', 
+            last_call_duration: 0 
+          })
+          .eq('phone_number', dbLookupNumber)
+          .then(({ error }) => {
+            if (error) console.error(`⚠️ Database Sync Error for ${currentNumber}:`, error.message);
+          });
+      }
+      return acc;
+    }, { successes: [], failures: [] });
+
+    // 6. Return response payload layout back to the React UI system  
+    return res.status(200).json({
+      success: summary.failures.length === 0,
+      message: `Telephony execution completed. Successes: ${summary.successes.length}, Failures: ${summary.failures.length}`,
+      data: summary
+    });
+
+  } catch (globalError) {
+    console.error("🚨 CRITICAL TELEPHONY SYSTEM FAULT:", globalError.message);
+    return res.status(500).json({
+      success: false,
+      message: 'Internal Application Server failed to negotiate processing payload with Twilio infrastructure.',
+      error: globalError.message
+    });
+  }
+});
+
+
+// 📑 TWILIO LIVE WEBHOOK RECEIVER: Process post-call metrics dynamically
+router.post('/twilio-voice-callback', async (req, res) => {
+  // Twilio sends its tracking metadata directly inside req.body
+  const { CallStatus, CallDuration, To } = req.body;
+  console.log(`🎯 Twilio Callback Event Received -> Target: ${To} | Status: ${CallStatus} | Duration: ${CallDuration}s`);
+  try {
+    // Clean up the phone number to match your Supabase string key format (remove '+')
+    if (To) {
+      const dbLookupNumber = To.replace('+', '').trim();
+      // Convert duration string to an integer safely, defaulting to 0 if null
+      const finalDuration = CallDuration ? parseInt(CallDuration, 10) : 0;
+      // Update the database with the absolute real-world data points
+      const { error } = await supabase
+        .from('church_members')
+        .update({
+          last_call_status: CallStatus,       // Changes from 'queued' to 'completed', 'busy', etc.
+          last_call_duration: finalDuration   // Changes from 0 to the actual seconds talked
+        })
+        .eq('phone_number', dbLookupNumber);
+
+      if (error) {
+        console.error(`⚠️ Webhook Database Write Failure for ${To}:`, error.message);
+      } else {
+        console.log(`✅ Supabase row synced successfully for target: ${dbLookupNumber}`);
+      }
+    }
+
+    // Always tell Twilio you received the data packet safely with a clean 200 HTTP response
+    return res.status(200).send('<Response></Response>');
+
+  } catch (err) {
+    console.error("🚨 Webhook Exception Fault:", err.message);
+    return res.status(500).send();
+  }
+});
+
 module.exports = router;
