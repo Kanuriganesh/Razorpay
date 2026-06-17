@@ -831,36 +831,49 @@ router.post('/broadcast-voice', async (req, res) => {
 
 // 📑 TWILIO LIVE WEBHOOK RECEIVER: Process post-call metrics dynamically
 router.post('/twilio-voice-callback', async (req, res) => {
-  // Twilio sends its tracking metadata directly inside req.body
-  const { CallStatus, CallDuration, To } = req.body;
-  console.log(`🎯 Twilio Callback Event Received -> Target: ${To} | Status: ${CallStatus} | Duration: ${CallDuration}s`);
+  // 🚀 Force clean log entry on incoming hit to completely diagnose execution tracking
+  console.log("🔥 TELEPHONY HANDSHAKE: Twilio callback receiver route was actively hit!");
+  console.log("📦 RAW REQ.BODY INSPECTION PACKET:", req.body);
+
+  // Fallback extraction mechanics: handle cases if parameters arrive structured differently
+  const status = req.body.CallStatus || req.body.callStatus || req.body.Status;
+  const duration = req.body.CallDuration || req.body.callDuration || req.body.Duration;
+  const destination = req.body.To || req.body.to;
+
+  console.log(`🎯 Parsed Variables -> Target: ${destination} | Status: ${status} | Duration: ${duration}s`);
+
   try {
-    // Clean up the phone number to match your Supabase string key format (remove '+')
-    if (To) {
-      const dbLookupNumber = To.replace('+', '').trim();
-      // Convert duration string to an integer safely, defaulting to 0 if null
-      const finalDuration = CallDuration ? parseInt(CallDuration, 10) : 0;
-      // Update the database with the absolute real-world data points
+    if (destination) {
+      // Strip out the '+' flag character to perfectly mirror your explicit Supabase string key format
+      const dbLookupNumber = destination.replace('+', '').trim();
+      const finalDuration = duration ? parseInt(duration, 10) : 0;
+      const cleanStatus = status ? status.toLowerCase() : 'completed';
+
+      console.log(`💾 Syncing database write tracking parameters for member number key: ${dbLookupNumber}...`);
+
+      // Execute row sync updates down to your live Supabase architecture
       const { error } = await supabase
         .from('church_members')
         .update({
-          last_call_status: CallStatus,       // Changes from 'queued' to 'completed', 'busy', etc.
-          last_call_duration: finalDuration   // Changes from 0 to the actual seconds talked
+          last_call_status: cleanStatus,      // e.g. Changes from 'queued' to 'completed', 'busy', 'no-answer'
+          last_call_duration: finalDuration   // Tracks the real-world operational seconds
         })
         .eq('phone_number', dbLookupNumber);
 
       if (error) {
-        console.error(`⚠️ Webhook Database Write Failure for ${To}:`, error.message);
+        console.error(`⚠️ Webhook Database Write Failure for ${destination}:`, error.message);
       } else {
         console.log(`✅ Supabase row synced successfully for target: ${dbLookupNumber}`);
       }
+    } else {
+      console.warn("⚠️ Telephony sync aborted: Destination identifier 'To' could not be safely extracted from req.body packet structure.");
     }
 
-    // Always tell Twilio you received the data packet safely with a clean 200 HTTP response
+    // Always deliver a valid empty TwiML container response so Twilio doesn't register server timeout log warnings
     return res.status(200).send('<Response></Response>');
 
   } catch (err) {
-    console.error("🚨 Webhook Exception Fault:", err.message);
+    console.error("🚨 Webhook Sync Exception Fault:", err.message);
     return res.status(500).send();
   }
 });
