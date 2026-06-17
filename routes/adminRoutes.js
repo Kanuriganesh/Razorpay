@@ -6,8 +6,13 @@ const crypto = require("crypto");
 const Razorpay = require("razorpay");
 const supabase = require('../config/supabaseClient'); // Double check your path to config       
 const axios = require('axios');   
-const twilio = require('twilio');
+const twilio = require('twilio');   
+const app = express();
+// 1. Parses your React JSON payloads
+app.use(express.json());
 
+// 🚀 2. THE FIX: Parses Twilio's URL-encoded webhook payloads!
+app.use(express.urlencoded({ extended: true }));
 // 🔐 Initialize the Twilio SDK Client using explicit environment variables
 const accountSid = process.env.TWILIO_ACCOUNT_SID;
 const authToken = process.env.TWILIO_AUTH_TOKEN;
@@ -687,9 +692,6 @@ router.put('/settings/audio', async (req, res) => {
   }
 });
 
-
-
-
 router.post('/broadcast-voice', async (req, res) => {
   const { phoneNumbers,  audioUrl } = req.body;   
   console.log(phoneNumbers, audioUrl)
@@ -744,9 +746,16 @@ router.post('/broadcast-voice', async (req, res) => {
 
     // 4. Fire Async Telephony Dispatches in Parallel
     const deliveryQueue = sanitizedNumbers.map(targetNumber => {
-      // If testing locally, use your ngrok or localtunnel HTTPS URL (e.g., 'https://your-ngrok-subdomain.ngrok-free.app')
-      // If deployed, use your live backend link (e.g., 'https://your-backend.onrender.com')
-      const serverBaseUrl = process.env.SERVER_URL || 'http://localhost:10000'; 
+      // 1. Grab your live URL, defaulting to a hardcoded backup string if things glitch out
+      const rawBaseUrl = process.env.SERVER_URL || 'https://razorpay-ia3u.onrender.com';
+      
+      // 2. Erase any trailing slash completely to stop double slash '//' validation errors
+      const cleanBaseUrl = rawBaseUrl.replace(/\/+$/, '');
+      
+      // 3. FIX THE TYPO: Explicitly target the routing path your webhook is listening on!
+      const finalCallbackUrl = `${cleanBaseUrl}/twilio-voice-callback`;
+
+      console.log(`📡 Sending Clean Tracking URL to Twilio Cloud: ${finalCallbackUrl}`);
 
       return client.calls.create({
         twiml: `<Response><Play>${audioUrl}</Play></Response>`,
@@ -754,9 +763,9 @@ router.post('/broadcast-voice', async (req, res) => {
         from: twilioCallerId,
         asyncAmd: 'Enable',
         
-        // 🔥 THE NEW TELEMETRY HOOK LAYER:
-        statusCallback: `http://localhost:10000/api/admin/twilio-voice-callback`,
-        statusCallbackEvent: ['completed', 'failed', 'busy', 'no-answer'],
+        // ✅ Pristine, error-proof configuration setup
+        statusCallback: finalCallbackUrl,
+        statusCallbackEvent: ['initiated', 'ringing', 'completed'],
         statusCallbackMethod: 'POST'
       });
     });
