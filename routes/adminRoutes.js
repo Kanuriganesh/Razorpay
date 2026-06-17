@@ -445,7 +445,7 @@ router.delete("/gallery/:id", async (req, res) => {
 
 // Route to create an order
 router.post("/payment/order", async (req, res) => {
-  console.log("hiiii")
+ 
   try {
     const rawAmount = parseInt(req.body.amount, 10);
     if (!rawAmount || isNaN(rawAmount)) {
@@ -471,7 +471,7 @@ router.post("/payment/order", async (req, res) => {
 
 // Route to verify payment
 router.post("/payment/verify", async (req, res) => {
-  console.log("=== INCOMING VERIFICATION PAYLOAD ===", req.body);
+ 
   try {
     const {
       razorpay_order_id,
@@ -482,7 +482,7 @@ router.post("/payment/verify", async (req, res) => {
 
     // 1. Double check that critical signature segments exist
     if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
-      console.log("Missing core tracking parameters!");
+     
       return res.status(400).json({ message: "Missing tracking signature parameters", success: false });
     }
 
@@ -492,11 +492,10 @@ router.post("/payment/verify", async (req, res) => {
       .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET.trim()) // added .trim() to wipe out hidden spaces!
       .update(body.toString())
       .digest("hex");
-    console.log("Expected Hash:", expectedSignature);
-    console.log("Received Hash:", razorpay_signature);
+    
 
     if (expectedSignature === razorpay_signature) {
-      console.log("✅ HASHES MATCH! Writing entry row to records storage...");
+     
 
       // 3. Save the entry row into your Database Table
       await Donation.create({
@@ -512,7 +511,7 @@ router.post("/payment/verify", async (req, res) => {
 
       return res.status(200).json({ message: "Verified and Saved to Database!", success: true });
     } else {
-      console.log("❌ CRITICAL HASH MATCH MISMATCH!");
+      
       return res.status(400).json({
         message: "Invalid signature verification validation match",
         success: false,
@@ -694,8 +693,7 @@ router.put('/settings/audio', async (req, res) => {
 
 router.post('/broadcast-voice', async (req, res) => {
   const { phoneNumbers,  audioUrl } = req.body;   
-  console.log(phoneNumbers, audioUrl)
-  console.log("Twilio Inbound Payload Interception:", { phoneNumbers,  audioUrl });
+  
 
   if (!phoneNumbers || !Array.isArray(phoneNumbers) || phoneNumbers.length === 0) {
     return res.status(400).json({ success: false, message: 'Invalid payload structure: phoneNumbers must be a non-empty array.' });
@@ -725,8 +723,7 @@ router.post('/broadcast-voice', async (req, res) => {
       })
       .filter(num => num !== null);
 
-    // 🚨 Add this log right here to see what is actually being passed to Twilio!
-    console.log("🛡️ Formatted targets sent to Twilio pipeline:", sanitizedNumbers);
+   
 
     // Exit immediately if verification filters clean out all array targets
     if (sanitizedNumbers.length === 0) {
@@ -742,7 +739,6 @@ router.post('/broadcast-voice', async (req, res) => {
       twimlPayload = `<Response><Play>${secureUrl}</Play></Response>`;
     } 
 
-    console.log(`🛡️ Verified Queue Targets: ${sanitizedNumbers.join(', ')}`);
 
     // 4. Fire Async Telephony Dispatches in Parallel
     const deliveryQueue = sanitizedNumbers.map(targetNumber => {
@@ -755,7 +751,6 @@ router.post('/broadcast-voice', async (req, res) => {
       // 3. FIX THE TYPO: Explicitly target the routing path your webhook is listening on!
       const finalCallbackUrl = `${cleanBaseUrl}/twilio-voice-callback`;
 
-      console.log(`📡 Sending Clean Tracking URL to Twilio Cloud: ${finalCallbackUrl}`);
 
       return client.calls.create({
         twiml: `<Response><Play>${audioUrl}</Play></Response>`,
@@ -778,7 +773,6 @@ router.post('/broadcast-voice', async (req, res) => {
       // Strip out the '+' to match your database column format
       const dbLookupNumber = currentNumber.replace('+', '');
       if (result.status === 'fulfilled') {   
-        //console.log("this is result from the successfull call",result)
         acc.successes.push({ number: currentNumber, sid: result.value.sid });
 
         // 🔥 FIRE-AND-FORGET UPDATE: Log the successful initial Twilio handover (e.g. "queued" or "initiated")
