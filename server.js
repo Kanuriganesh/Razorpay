@@ -11,8 +11,7 @@ const Event = require("./models/Event");
 const Sermon = require("./models/Sermon");
 const Gallery = require("./models/Gallery");    
 
-// 🚀 ADD THIS TO THE TOP OF YOUR server.js FILE
-const { createClient } = require('@supabase/supabase-client');
+const { createClient } = require('@supabase/supabase-js');
 
 // Force-load your live environment keys
 const supabaseUrl = process.env.SUPABASE_URL;
