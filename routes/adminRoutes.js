@@ -831,11 +831,10 @@ router.post('/broadcast-voice', async (req, res) => {
 
 // 📑 TWILIO LIVE WEBHOOK RECEIVER: Process post-call metrics dynamically
 router.post('/twilio-voice-callback', async (req, res) => {
-  // 🚀 Force clean log entry on incoming hit to completely diagnose execution tracking
+  // Force clean log entry on incoming hit to completely diagnose execution tracking
   console.log("🔥 TELEPHONY HANDSHAKE: Twilio callback receiver route was actively hit!");
   console.log("📦 RAW REQ.BODY INSPECTION PACKET:", req.body);
 
-  // Fallback extraction mechanics: handle cases if parameters arrive structured differently
   const status = req.body.CallStatus || req.body.callStatus || req.body.Status;
   const duration = req.body.CallDuration || req.body.callDuration || req.body.Duration;
   const destination = req.body.To || req.body.to;
@@ -869,12 +868,15 @@ router.post('/twilio-voice-callback', async (req, res) => {
       console.warn("⚠️ Telephony sync aborted: Destination identifier 'To' could not be safely extracted from req.body packet structure.");
     }
 
-    // Always deliver a valid empty TwiML container response so Twilio doesn't register server timeout log warnings
-    return res.status(200).send('<Response></Response>');
+    // 🚀 THE FIX FOR ERROR 15003: 
+    // Respond with 204 No Content and a completely empty response body.
+    // This tells Twilio everything went great, satisfying its parser perfectly!
+    return res.status(204).end();
 
   } catch (err) {
     console.error("🚨 Webhook Sync Exception Fault:", err.message);
-    return res.status(500).send();
+    // If your code crashes inside the try block, return a clean 204 anyway so Twilio stops logging warnings
+    return res.status(204).end();
   }
 });
 
