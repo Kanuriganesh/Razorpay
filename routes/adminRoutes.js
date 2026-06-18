@@ -706,29 +706,46 @@ router.post('/broadcast-voice', async (req, res) => {
 
   try {
    // In your Backend Express Voice route file, update the map block:
-    const sanitizedNumbers = phoneNumbers
-      .map(num => {
-        if (typeof num !== 'string') return null;
-        let clean = num.trim().replace(/\D/g, '');
+    // ✅ NEW SANITIZATION SECTION (India, UK, & USA/Canada Support):
+const sanitizedNumbers = phoneNumbers
+  .map(num => {
+    if (typeof num !== 'string') return null;
+    let clean = num.trim().replace(/\D/g, '');
 
-        if (clean.length === 10) {
-          return `+91${clean}`;
-        } 
-        // Captures both 91 (India) and 44 (UK) 12-digit payloads cleanly!
-        if (clean.length === 12 && (clean.startsWith('91') || clean.startsWith('44'))) {
-          return `+${clean}`; // Becomes +44XXXXXXXXXX
-        }
-        
-        return null;
-      })
-      .filter(num => num !== null);
+    // 1. Handle 10-digit entries
+    if (clean.length === 10) {
+      // US numbers can start with area codes 2 through 9. 
+      // If it starts with 6, 7, 8, or 9, it's highly likely an Indian mobile number.
+      if (/^[6-9]/.test(clean)) {
+        return `+91${clean}`; // Fallback auto-route to India
+      } else {
+        return `+1${clean}`;  // Route to USA/Canada
+      }
+    } 
+    
+    // 2. Handle 11-digit entries (Clean USA format like 17163303008)
+    if (clean.length === 11 && clean.startsWith('1')) {
+      return `+${clean}`; // Becomes +17163303008
+    }
+
+    // 3. Handle 12-digit entries (Clean India +91 or UK +44 formats)
+    if (clean.length === 12 && (clean.startsWith('91') || clean.startsWith('44'))) {
+      return `+${clean}`; // Becomes +91XXXXXXXXXX or +44XXXXXXXXXX
+    }
+    
+    return null;
+  })
+  .filter(num => num !== null);
 
    
 
-    // Exit immediately if verification filters clean out all array targets
-    if (sanitizedNumbers.length === 0) {
-      return res.status(400).json({ success: false, message: 'Security check failed: No valid Indian mobile numbers detected.' });
-    }
+   // Exit immediately if verification filters clean out all array targets
+if (sanitizedNumbers.length === 0) {
+  return res.status(400).json({ 
+    success: false, 
+    message: 'Security check failed: No valid Indian (+91), UK (+44), or US (+1) mobile numbers detected.' 
+  });
+}
 
     // 3. Construct Immutable TwiML Instruction Payloads
     // This dynamically determines if Twilio plays a raw MP3/WAV or triggers a Text-to-Speech Engine
