@@ -839,5 +839,34 @@ if (sanitizedNumbers.length === 0) {
   }
 });
 
+// 🚀 BACKEND ROUTE: Cleanly remove a member from the database
+router.delete('/delete-user/:id', async (req, res) => {
+  const { id } = req.params; // Grabs the unique ID straight from the URL path
 
+  if (!id) {
+    return res.status(400).json({ success: false, message: 'Missing parameters: Unique identifier required.' });
+  }
+
+  try {
+    // Execute a clean target deletion from your Supabase table
+    const { data, error } = await supabase
+      .from('church_members')
+      .delete()
+      .eq('id', id); // 👈 Or use .eq('phone_number', id) if you look up by phone number
+
+    if (error) throw error;
+
+    return res.status(200).json({ 
+      success: true, 
+      message: 'Member removed from the database permanently!' 
+    });
+
+  } catch (error) {
+    console.error('🚨 Admin Delete Operation Failure:', error.message);
+    return res.status(500).json({ 
+      success: false, 
+      message: 'Failed to purge record from infrastructure: ' + error.message 
+    });
+  }
+});
 module.exports = router;
